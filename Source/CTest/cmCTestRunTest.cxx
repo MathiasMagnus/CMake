@@ -604,9 +604,56 @@ bool cmCTestRunTest::StartTest(size_t completed, size_t total)
     }
   }
 
+#ifdef _WIN32
+  auto os_to_standard_handle = [this](DWORD os_handle)
+  {
+    HANDLE standard_handle = GetStdHandle(os_handle);
+    if (standard_handle == INVALID_HANDLE_VALUE)
+        cmCTestLog(this->CTest, ERROR_MESSAGE,
+               "Unable to get standard handle: " << os_handle << std::endl);
+
+    return standard_handle;
+  };
+  auto save_console_mode = [=](DWORD os_handle)
+  {
+    HANDLE standard_handle = os_to_standard_handle(os_handle);
+    DWORD mode;
+
+    if (!GetConsoleMode(standard_handle, &mode))
+        cmCTestLog(this->CTest, ERROR_MESSAGE,
+               "Unable to get console mode for: " << mode << std::endl);
+    
+    return mode;
+  };
+
+  auto resotre_console_mode = [=](DWORD os_handle, DWORD mode)
+  {
+    HANDLE standard_handle = os_to_standard_handle(os_handle);
+
+    if (!SetConsoleMode(standard_handle, mode))
+      cmCTestLog(this->CTest, ERROR_MESSAGE,
+               "Unable to set console mode on: " << os_handle << std::endl);
+  };
+
+  const std::lock_guard<std::mutex> lock(console_mutex);
+
+  auto current_stdout_mode = save_console_mode(STD_OUTPUT_HANDLE);
+  auto current_stderr_mode = save_console_mode(STD_ERROR_HANDLE);
+
+  auto result =
+    this->ForkProcess(timeout, this->TestProperties->ExplicitTimeout,
+                      &this->TestProperties->Environment,
+                      &this->TestProperties->Affinity);
+
+  resotre_console_mode(STD_OUTPUT_HANDLE, current_stdout_mode);
+  resotre_console_mode(STD_ERROR_HANDLE, current_stderr_mode);
+
+  return result;
+#else
   return this->ForkProcess(timeout, this->TestProperties->ExplicitTimeout,
                            &this->TestProperties->Environment,
                            &this->TestProperties->Affinity);
+#endif
 }
 
 void cmCTestRunTest::ComputeArguments()

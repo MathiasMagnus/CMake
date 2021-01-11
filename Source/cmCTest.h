@@ -532,6 +532,9 @@ private:
   std::unique_ptr<Private> Impl;
 };
 
+#include <mutex>
+extern std::mutex console_mutex;
+
 class cmCTestLogWrite
 {
 public:
@@ -550,6 +553,7 @@ inline std::ostream& operator<<(std::ostream& os, const cmCTestLogWrite& c)
   if (!c.Length) {
     return os;
   }
+  const std::lock_guard<std::mutex> lock(console_mutex);
   os.write(c.Data, c.Length);
   os.flush();
   return os;

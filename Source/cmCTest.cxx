@@ -70,6 +70,8 @@
 #  include <be/kernel/OS.h> /* disable_debugger() API. */
 #endif
 
+std::mutex console_mutex;
+
 struct cmCTest::Private
 {
   /** Representation of one part.  */

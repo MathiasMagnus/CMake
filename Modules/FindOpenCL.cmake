@@ -101,7 +101,7 @@ endfunction()
 find_path(OpenCL_INCLUDE_DIR
   NAMES
     CL/cl.h OpenCL/cl.h
-  NO_CMAKE_SYSTEM_PATH
+  #NO_CMAKE_SYSTEM_PATH
   PATHS
     ENV "PROGRAMFILES(X86)"
     ENV "PROGRAMFILES"
@@ -166,7 +166,7 @@ if(WIN32)
   if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     find_library(OpenCL_LIBRARY
       NAMES OpenCL
-      NO_CMAKE_SYSTEM_PATH
+      #NO_CMAKE_SYSTEM_PATH
       PATHS
         ENV "PROGRAMFILES(X86)"
         ENV "PROGRAMFILES"

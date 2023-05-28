@@ -52,6 +52,7 @@ The module will also define two cache variables::
 
 #]=======================================================================]
 
+# Deduplicate PATHS and PATH_SUFFIXES
 set(_OPENCL_x86 "(x86)")
 set(_VENDOR_SDK_ENVS
   ENV AMDAPPSDKROOT
@@ -60,6 +61,37 @@ set(_VENDOR_SDK_ENVS
   ENV CUDA_PATH
   ENV ATISTREAMSDKROOT
   ENV OCL_ROOT)
+set(_LINUX_VENDOR_SDK_PATHS
+  /usr/local/cuda
+  /opt/cuda)
+set(_INCLUDE_PATH_SUFFIXES
+  include
+  OpenCL/common/inc
+  "AMD APP/include")
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+  set(_LINUX_LIB_PATH_SUFFIXES
+    lib/x86
+    lib)
+  set(_WIN_LIB_PATH_SUFFIXES
+    "AMD APP/lib/x86"
+    lib/x86
+    lib/Win32
+    OpenCL/common/lib/Win32)
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(_LINUX_LIB_PATH_SUFFIXES
+    lib/x86_64
+    lib/x64
+    lib
+    lib64)
+  set(_WIN_LIB_PATH_SUFFIXES
+    "AMD APP/lib/x86_64"
+    lib/x86_64
+    lib/x64
+    lib
+    OpenCL/common/lib/x64)
+else()
+  message(DEBUG "Unexpected pointer width. No lib suffixes set.")
+endif()
 
 function(_FIND_OPENCL_VERSION)
   include(CheckSymbolExists)
@@ -98,257 +130,135 @@ function(_FIND_OPENCL_VERSION)
   CMAKE_POP_CHECK_STATE()
 endfunction()
 
-find_path(OpenCL_INCLUDE_DIR
-  NAMES
-    CL/cl.h OpenCL/cl.h
-  #NO_CMAKE_SYSTEM_PATH
-  PATHS
+function(_GET_PROGRAMFILES_PATHS INSTALL_FOLDER OUT_VAR)
+  set(${OUT_VAR}
     ENV "PROGRAMFILES(X86)"
     ENV "PROGRAMFILES"
-    $ENV{PROGRAMFILES${_OPENCL_x86}}/OpenCLHeaders
-    $ENV{PROGRAMFILES}/OpenCLHeaders
-    ${_VENDOR_SDK_ENVS}
-    /usr/local/cuda
-    /opt/cuda
-  PATH_SUFFIXES
-    include
-    OpenCL/common/inc
-    "AMD APP/include")
+    $ENV{PROGRAMFILES${_OPENCL_x86}}/${INSTALL_FOLDER}
+    $ENV{PROGRAMFILES}/${INSTALL_FOLDER}
+    PARENT_SCOPE
+  )
+endfunction()
 
+_GET_PROGRAMFILES_PATHS(OpenCLHeaders _OPENCLHEADERS_PROGRAMFILES)
+_GET_PROGRAMFILES_PATHS(OpenCLHeadersCpp _OPENCLHEADERSCPP_PROGRAMFILES)
+_GET_PROGRAMFILES_PATHS(OpenCL-ICD-Loader _OPENCLICDLOADER_PROGRAMFILES)
+_GET_PROGRAMFILES_PATHS(OpenCL-SDK _OPENCLSDK_PROGRAMFILES)
+
+# Find C API header
+find_path(OpenCL_INCLUDE_DIR
+  NAMES
+    CL/cl.h
+    OpenCL/cl.h
+  PATHS
+    ${_OPENCLHEADERS_PROGRAMFILES}
+    ${_VENDOR_SDK_ENVS}
+    ${_LINUX_VENDOR_SDK_PATHS}
+  PATH_SUFFIXES
+    ${_INCLUDE_PATH_SUFFIXES})
+
+# Check version of header
 _FIND_OPENCL_VERSION()
 
+# Find C++ API header and utility headers
 find_path(OpenCL_HeadersCpp_INCLUDE_DIR
   NAMES CL/opencl.hpp
   PATHS
-    ENV "PROGRAMFILES(X86)"
-    ENV "PROGRAMFILES"
-    $ENV{PROGRAMFILES${_OPENCL_x86}}/OpenCLHeadersCpp
-    $ENV{PROGRAMFILES}/OpenCLHeadersCpp
+    ${_OPENCLHEADERSCPP_PROGRAMFILES}
     ${_VENDOR_SDK_ENVS}
-    /usr/local/cuda
-    /opt/cuda
+    ${_LINUX_VENDOR_SDK_PATHS}
   PATH_SUFFIXES
-    include
-    OpenCL/common/inc
-    "AMD APP/include")
+    ${_INCLUDE_PATH_SUFFIXES})
 
 find_path(OpenCL_Utils_INCLUDE_DIR
   NAMES CL/Utils/Utils.h
   PATHS
-    ENV "PROGRAMFILES(X86)"
-    ENV "PROGRAMFILES"
-    $ENV{PROGRAMFILES${_OPENCL_x86}}/OpenCL-SDK
-    $ENV{PROGRAMFILES}/OpenCL-SDK
+    ${_OPENCLSDK_PROGRAMFILES}
     ${_VENDOR_SDK_ENVS}
-    /usr/local/cuda
-    /opt/cuda
+    ${_LINUX_VENDOR_SDK_PATHS}
   PATH_SUFFIXES
-    include
-    OpenCL/common/inc
-    "AMD APP/include")
+    ${_INCLUDE_PATH_SUFFIXES})
 
 find_path(OpenCL_UtilsCpp_INCLUDE_DIR
   NAMES CL/Utils/Utils.hpp
   PATHS
-    ENV "PROGRAMFILES(X86)"
-    ENV "PROGRAMFILES"
-    $ENV{PROGRAMFILES${_OPENCL_x86}}/OpenCL-SDK
-    $ENV{PROGRAMFILES}/OpenCL-SDK
+    ${_OPENCLSDK_PROGRAMFILES}
     ${_VENDOR_SDK_ENVS}
-    /usr/local/cuda
-    /opt/cuda
+    ${_LINUX_VENDOR_SDK_PATHS}
   PATH_SUFFIXES
-    include
-    OpenCL/common/inc
-    "AMD APP/include")
+    ${_INCLUDE_PATH_SUFFIXES})
 
+# Find libraries
 if(WIN32)
-  if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-    find_library(OpenCL_LIBRARY
-      NAMES OpenCL
-      #NO_CMAKE_SYSTEM_PATH
+  find_library(OpenCL_LIBRARY
+    NAMES OpenCL
+    PATHS
+      ${_OPENCLICDLOADER_PROGRAMFILES}
+      ${_VENDOR_SDK_ENVS}
+    PATH_SUFFIXES
+      ${_WIN_LIB_PATH_SUFFIXES})
+
+  foreach(UtilLibName Utils UtilsCpp)
+    find_library(OpenCL_${UtilLibName}_LIBRARY
+      NAMES OpenCL${UtilLibName}
       PATHS
-        ENV "PROGRAMFILES(X86)"
-        ENV "PROGRAMFILES"
-        $ENV{PROGRAMFILES${_OPENCL_x86}}/OpenCL-ICD-Loader
-        $ENV{PROGRAMFILES}/OpenCL-ICD-Loader
+        ${_OPENCLSDK_PROGRAMFILES}
         ${_VENDOR_SDK_ENVS}
       PATH_SUFFIXES
-        "AMD APP/lib/x86"
-        lib/x86
-        lib/Win32
-        OpenCL/common/lib/Win32)
-
-    foreach(UtilLibName Utils UtilsCpp)
-      find_library(OpenCL_${UtilLibName}_LIBRARY
-        NAMES OpenCL${UtilLibName}
-        PATHS
-          ENV "PROGRAMFILES(X86)"
-          ENV "PROGRAMFILES"
-          $ENV{PROGRAMFILES${_OPENCL_x86}}/OpenCL-SDK
-          $ENV{PROGRAMFILES}/OpenCL-SDK
-          ${_VENDOR_SDK_ENVS}
-        PATH_SUFFIXES
-          "AMD APP/lib/x86"
-          lib/x86
-          lib/Win32
-          OpenCL/common/lib/Win32)
-      find_library(OpenCL_${UtilLibName}_DEBUG_LIBRARY
-        NAMES OpenCL${UtilLibName}d
-        PATHS
-          ENV "PROGRAMFILES(X86)"
-          ENV "PROGRAMFILES"
-          $ENV{PROGRAMFILES${_OPENCL_x86}}/OpenCL-SDK
-          $ENV{PROGRAMFILES}/OpenCL-SDK
-          ${_VENDOR_SDK_ENVS}
-        PATH_SUFFIXES
-          "AMD APP/lib/x86"
-          lib/x86
-          lib/Win32
-          OpenCL/common/lib/Win32)
-    endforeach()
-  elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    find_library(OpenCL_LIBRARY
-      NAMES OpenCL
+        ${_WIN_LIB_PATH_SUFFIXES})
+    find_library(OpenCL_${UtilLibName}_DEBUG_LIBRARY
+      NAMES OpenCL${UtilLibName}d
       PATHS
-        ENV "PROGRAMFILES(X86)"
-        ENV "PROGRAMFILES"
-        $ENV{PROGRAMFILES${_OPENCL_x86}}/OpenCL-ICD-Loader
-        $ENV{PROGRAMFILES}/OpenCL-ICD-Loader
+        ${_OPENCLSDK_PROGRAMFILES}
         ${_VENDOR_SDK_ENVS}
       PATH_SUFFIXES
-        "AMD APP/lib/x86_64"
-        lib/x86_64
-        lib/x64
-        lib
-        OpenCL/common/lib/x64)
-
-    foreach(UtilLibName Utils UtilsCpp)
-      find_library(OpenCL_${UtilLibName}_LIBRARY
-        NAMES OpenCL${UtilLibName}
-        PATHS
-          ENV "PROGRAMFILES(X86)"
-          ENV "PROGRAMFILES"
-          $ENV{PROGRAMFILES${_OPENCL_x86}}/OpenCL-SDK
-          $ENV{PROGRAMFILES}/OpenCL-SDK
-          ${_VENDOR_SDK_ENVS}
-        PATH_SUFFIXES
-          "AMD APP/lib/x86_64"
-          lib/x86_64
-          lib/x64
-          lib
-          OpenCL/common/lib/x64)
-      find_library(OpenCL_${UtilLibName}_DEBUG_LIBRARY
-        NAMES OpenCL${UtilLibName}d
-        PATHS
-          ENV "PROGRAMFILES(X86)"
-          ENV "PROGRAMFILES"
-          $ENV{PROGRAMFILES${_OPENCL_x86}}/OpenCL-SDK
-          $ENV{PROGRAMFILES}/OpenCL-SDK
-          ${_VENDOR_SDK_ENVS}
-        PATH_SUFFIXES
-          "AMD APP/lib/x86_64"
-          lib/x86_64
-          lib/x64
-          lib
-          OpenCL/common/lib/x64)
-    endforeach()
-  endif()
+        ${_WIN_LIB_PATH_SUFFIXES})
+  endforeach()
 else()
-  if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-    find_library(OpenCL_LIBRARY
-      NAMES OpenCL
-      PATHS
-        ENV AMDAPPSDKROOT
-        ENV CUDA_PATH
-        /usr/local/cuda
-        /opt/cuda
-      PATH_SUFFIXES
-        lib/x86
-        lib)
+  find_library(OpenCL_LIBRARY
+    NAMES OpenCL
+    PATHS
+      ${_VENDOR_SDK_ENVS}
+      ${_LINUX_VENDOR_SDK_PATHS}
+    PATH_SUFFIXES
+      ${_LINUX_LIB_PATH_SUFFIXES})
 
-    foreach(UtilLibName Utils UtilsCpp)
-      find_library(OpenCL_${UtilLibName}_LIBRARY
-        NAMES OpenCL${UtilLibName}
-        PATHS
-          ENV AMDAPPSDKROOT
-          ENV CUDA_PATH
-          /usr/local/cuda
-          /opt/cuda
-        PATH_SUFFIXES
-          lib/x86
-          lib)
-      find_library(OpenCL_${UtilLibName}_DEBUG_LIBRARY
-        NAMES OpenCL${UtilLibName}d
-        PATHS
-          ENV AMDAPPSDKROOT
-          ENV CUDA_PATH
-          /usr/local/cuda
-          /opt/cuda
-        PATH_SUFFIXES
-          lib/x86
-          lib)
-    endforeach()
-  elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    find_library(OpenCL_LIBRARY
-      NAMES OpenCL
+  foreach(UtilLibName Utils UtilsCpp)
+    find_library(OpenCL_${UtilLibName}_LIBRARY
+      NAMES OpenCL${UtilLibName}
       PATHS
-        ENV AMDAPPSDKROOT
-        ENV CUDA_PATH
-        /usr/local/cuda
-        /opt/cuda
+        ${_VENDOR_SDK_ENVS}
+        ${_LINUX_VENDOR_SDK_PATHS}
       PATH_SUFFIXES
-        lib/x86_64
-        lib/x64
-        lib
-        lib64)
-
-    foreach(UtilLibName Utils UtilsCpp)
-      find_library(OpenCL_${UtilLibName}_LIBRARY
-        NAMES OpenCL${UtilLibName}
-        PATHS
-          ENV AMDAPPSDKROOT
-          ENV CUDA_PATH
-          /usr/local/cuda
-          /opt/cuda
-        PATH_SUFFIXES
-          lib/x86_64
-          lib/x64
-          lib
-          lib64)
-    endforeach()
-  endif()
+        ${_LINUX_LIB_PATH_SUFFIXES})
+    find_library(OpenCL_${UtilLibName}_DEBUG_LIBRARY
+      NAMES OpenCL${UtilLibName}d
+      PATHS
+        ${_VENDOR_SDK_ENVS}
+        ${_LINUX_VENDOR_SDK_PATHS}
+      PATH_SUFFIXES
+        ${_LINUX_LIB_PATH_SUFFIXES})
+  endforeach()
 endif()
 
 unset(_OPENCL_x86)
 
-message(STATUS "OpenCL_UtilsCpp_LIBRARY: ${OpenCL_UtilsCpp_LIBRARY}")
-message(STATUS "OpenCL_UtilsCpp_DEBUG_LIBRARY: ${OpenCL_UtilsCpp_DEBUG_LIBRARY}")
-
+# If user specified components, both restrict to searching for only those
+# components and enforce finding all of them.
 if(OpenCL_FIND_COMPONENTS)
-  message(STATUS "OpenCL_FIND_COMPONENTS defined and: ${OpenCL_FIND_COMPONENTS}")
   foreach(component ${OpenCL_FIND_COMPONENTS})
     if(component STREQUAL "Headers")
-      message(STATUS "Setting OPENCL_USE_HEADERS")
       set(OPENCL_USE_HEADERS 1)
     elseif(component STREQUAL "HeadersCpp")
       set(OPENCL_USE_HEADERSCPP 1)
       set(OPENCL_USE_HEADERS 1)
     elseif(component STREQUAL "OpenCL")
-      message(STATUS "Setting OPENCL_USE_HEADERS")
-      message(STATUS "Setting OPENCL_USE_ICD_LOADER")
       set(OPENCL_USE_HEADERS 1)
       set(OPENCL_USE_ICD_LOADER 1)
     elseif(component STREQUAL "Utils")
-      message(STATUS "Setting OPENCL_USE_HEADERS")
-      message(STATUS "Setting OPENCL_USE_UTILS")
       set(OPENCL_USE_UTILS 1)
       set(OPENCL_USE_HEADERS 1)
     elseif(component STREQUAL "UtilsCpp")
-      message(STATUS "Setting OPENCL_USE_HEADERS")
-      message(STATUS "Setting OPENCL_USE_HEADERSCPP")
-      message(STATUS "Setting OPENCL_USE_UTILS")
-      message(STATUS "Setting OPENCL_USE_UTILSCPP")
       set(OPENCL_USE_UTILSCPP 1)
       set(OPENCL_USE_UTILS 1)
       set(OPENCL_USE_HEADERSCPP 1)
@@ -357,7 +267,6 @@ if(OpenCL_FIND_COMPONENTS)
   endforeach()
 
   if(OPENCL_USE_HEADERS)
-    message(STATUS "Appending OpenCL_INCLUDE_DIR to _OpenCL_REQUIRED_VARS")
     list(APPEND _OpenCL_REQUIRED_VARS OpenCL_INCLUDE_DIR)
     list(APPEND _OpenCL_ADVANCED_VARS OpenCL_INCLUDE_DIR)
     list(APPEND OpenCL_INCLUDE_DIRS "${OpenCL_INCLUDE_DIR}")
@@ -370,25 +279,20 @@ if(OpenCL_FIND_COMPONENTS)
   endif()
 
   if(OPENCL_USE_ICD_LOADER)
-    message(STATUS "Appending OpenCL_LIBRARY to _OpenCL_REQUIRED_VARS")
     list(APPEND _OpenCL_REQUIRED_VARS OpenCL_LIBRARY)
     list(APPEND _OpenCL_ADVANCED_VARS OpenCL_LIBRARY)
     list(APPEND OpenCL_LIBRARIES "${OpenCL_LIBRARY}")
   endif()
 
   if(OPENCL_USE_UTILS)
-    message(STATUS "Appending OpenCL_Utils_INCLUDE_DIR to _OpenCL_REQUIRED_VARS")
     list(APPEND _OpenCL_REQUIRED_VARS OpenCL_Utils_INCLUDE_DIR)
     list(APPEND _OpenCL_ADVANCED_VARS OpenCL_Utils_INCLUDE_DIR)
     list(APPEND OpenCL_INCLUDE_DIRS "${OpenCL_Utils_INCLUDE_DIR}")
-    #if(OpenCL_Utils_DEBUG_LIBRARY AND NOT OpenCL_Utils_LIBRARY)
     if(WIN32)
-      message(STATUS "Appending OpenCL_Utils_DEBUG_LIBRARY to _OpenCL_REQUIRED_VARS")
       list(APPEND _OpenCL_REQUIRED_VARS OpenCL_Utils_DEBUG_LIBRARY)
       list(APPEND _OpenCL_ADVANCED_VARS OpenCL_Utils_DEBUG_LIBRARY)
       list(APPEND OpenCL_LIBRARIES_DEBUG "${OpenCL_Utils_DEBUG_LIBRARY}")
     endif()
-    message(STATUS "Appending OpenCL_Utils_LIBRARY to _OpenCL_REQUIRED_VARS")
     list(APPEND _OpenCL_REQUIRED_VARS OpenCL_Utils_LIBRARY)
     list(APPEND _OpenCL_ADVANCED_VARS OpenCL_Utils_LIBRARY)
     list(APPEND OpenCL_LIBRARIES "${OpenCL_Utils_LIBRARY}")
@@ -396,28 +300,31 @@ if(OpenCL_FIND_COMPONENTS)
   endif()
 
   if(OPENCL_USE_UTILSCPP)
-    message(STATUS "Appending OpenCL_UtilsCpp_INCLUDE_DIR to _OpenCL_REQUIRED_VARS")
     list(APPEND _OpenCL_REQUIRED_VARS OpenCL_UtilsCpp_INCLUDE_DIR)
     list(APPEND _OpenCL_ADVANCED_VARS OpenCL_UtilsCpp_INCLUDE_DIR)
     list(APPEND OpenCL_INCLUDE_DIRS "${OpenCL_UtilsCpp_INCLUDE_DIR}")
-    #if(OpenCL_UtilsCpp_DEBUG_LIBRARY AND NOT OpenCL_UtilsCpp_LIBRARY)
     if(WIN32)
-      message(STATUS "Appending OpenCL_UtilsCpp_DEBUG_LIBRARY to _OpenCL_REQUIRED_VARS")
       list(APPEND _OpenCL_REQUIRED_VARS OpenCL_UtilsCpp_DEBUG_LIBRARY)
       list(APPEND _OpenCL_ADVANCED_VARS OpenCL_UtilsCpp_DEBUG_LIBRARY)
       list(APPEND OpenCL_LIBRARIES_DEBUG "${OpenCL_UtilsCpp_DEBUG_LIBRARY}")
     endif()
-    message(STATUS "Appending OpenCL_UtilsCpp_LIBRARY to _OpenCL_REQUIRED_VARS")
     list(APPEND _OpenCL_REQUIRED_VARS OpenCL_UtilsCpp_LIBRARY)
     list(APPEND _OpenCL_ADVANCED_VARS OpenCL_UtilsCpp_LIBRARY)
     list(APPEND OpenCL_LIBRARIES "${OpenCL_UtilsCpp_LIBRARY}")
     
   endif()
+# If the user did not specify components explicitly, in the spirit of backwards compat,
+# find Headers and ICD-Loader minimally to succeed, but add HeadersCpp, Utils and
+# UtilsCpp to the result variables if present.
 else()
   list(APPEND _OpenCL_REQUIRED_VARS OpenCL_INCLUDE_DIR OpenCL_LIBRARY)
   set(OpenCL_LIBRARIES "${OpenCL_LIBRARY}")
   set(OpenCL_INCLUDE_DIRS "${OpenCL_INCLUDE_DIR}")
   list(APPEND _OpenCL_ADVANCED_VARS OpenCL_LIBRARY OpenCL_INCLUDE_DIR)
+  if(OpenCL_HeadersCpp_INCLUDE_DIR)
+    list(APPEND OpenCL_INCLUDE_DIRS "${OpenCL_HeadersCpp_INCLUDE_DIR}")
+    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_HeadersCpp_INCLUDE_DIR)
+  endif()
   if(OpenCL_Utils_INCLUDE_DIR)
     list(APPEND OpenCL_INCLUDE_DIRS "${OpenCL_Utils_INCLUDE_DIR}")
     list(APPEND _OpenCL_ADVANCED_VARS OpenCL_Utils_INCLUDE_DIR)
@@ -444,6 +351,7 @@ else()
   endif()
 endif()
 
+# Decide whether find_package succeeds or fails
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 find_package_handle_standard_args(
   OpenCL
@@ -451,9 +359,9 @@ find_package_handle_standard_args(
   REQUIRED_VARS ${_OpenCL_REQUIRED_VARS}
   VERSION_VAR OpenCL_VERSION_STRING)
 
-message(STATUS "${_OpenCL_ADVANCED_VARS}")
 mark_as_advanced(${_OpenCL_ADVANCED_VARS})
 
+# Create IMPORTED targets upon success (and guard against multiple invocations)
 if(OpenCL_FOUND AND NOT TARGET OpenCL::Headers)
   add_library(OpenCL::Headers INTERFACE IMPORTED)
   set_target_properties(OpenCL::Headers PROPERTIES
@@ -502,20 +410,17 @@ if(OpenCL_FOUND AND NOT TARGET OpenCL::Utils)
 endif()
 
 if(OpenCL_FOUND AND NOT TARGET OpenCL::UtilsCpp)
-  message(STATUS "Defining UtilsCpp")
   add_library(OpenCL::UtilsCpp UNKNOWN IMPORTED)
   set_target_properties(OpenCL::UtilsCpp PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES
       "${OpenCL_INCLUDE_DIR};${OpenCL_Utils_INCLUDE_DIR};${OpenCL_UtilsCpp_INCLUDE_DIR}")
   if(OpenCL_UtilsCpp_LIBRARY)
-    message(STATUS "Adding Release import location")
     set_property(TARGET OpenCL::UtilsCpp APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
     set_target_properties(OpenCL::UtilsCpp PROPERTIES
       IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
       IMPORTED_LOCATION_RELEASE "${OpenCL_UtilsCpp_LIBRARY}")
   endif()
   if(OpenCL_UtilsCpp_DEBUG_LIBRARY)
-    message(STATUS "Adding Debug import location")
     set_property(TARGET OpenCL::UtilsCpp APPEND PROPERTY IMPORTED_CONFIGURATIONS DEBUG)
     set_target_properties(OpenCL::UtilsCpp PROPERTIES
       IMPORTED_LINK_INTERFACE_LANGUAGES_DEBUG "CXX"

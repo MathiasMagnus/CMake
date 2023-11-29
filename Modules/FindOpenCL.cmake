@@ -20,7 +20,7 @@ IMPORTED Targets
 This module defines :prop_tgt:`IMPORTED` target ``OpenCL::OpenCL``, if
 OpenCL has been found.
 
-.. versionadded:: 3.27
+.. versionadded:: 3.29
 
 This module supports detecting various parts of common OpenCL SDKs as
 `COMPONENTS`. Some components may only ship with the Khronos hosted SDK.
@@ -284,70 +284,17 @@ if(OpenCL_FIND_COMPONENTS)
     list(APPEND OpenCL_LIBRARIES "${OpenCL_LIBRARY}")
   endif()
 
-  if(OPENCL_USE_UTILS)
-    list(APPEND _OpenCL_REQUIRED_VARS OpenCL_Utils_INCLUDE_DIR)
-    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_Utils_INCLUDE_DIR)
-    list(APPEND OpenCL_INCLUDE_DIRS "${OpenCL_Utils_INCLUDE_DIR}")
-    if(WIN32)
-      list(APPEND _OpenCL_REQUIRED_VARS OpenCL_Utils_DEBUG_LIBRARY)
-      list(APPEND _OpenCL_ADVANCED_VARS OpenCL_Utils_DEBUG_LIBRARY)
-      list(APPEND OpenCL_LIBRARIES_DEBUG "${OpenCL_Utils_DEBUG_LIBRARY}")
-    endif()
-    list(APPEND _OpenCL_REQUIRED_VARS OpenCL_Utils_LIBRARY)
-    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_Utils_LIBRARY)
-    list(APPEND OpenCL_LIBRARIES "${OpenCL_Utils_LIBRARY}")
-    
-  endif()
-
-  if(OPENCL_USE_UTILSCPP)
-    list(APPEND _OpenCL_REQUIRED_VARS OpenCL_UtilsCpp_INCLUDE_DIR)
-    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_UtilsCpp_INCLUDE_DIR)
-    list(APPEND OpenCL_INCLUDE_DIRS "${OpenCL_UtilsCpp_INCLUDE_DIR}")
-    if(WIN32)
-      list(APPEND _OpenCL_REQUIRED_VARS OpenCL_UtilsCpp_DEBUG_LIBRARY)
-      list(APPEND _OpenCL_ADVANCED_VARS OpenCL_UtilsCpp_DEBUG_LIBRARY)
-      list(APPEND OpenCL_LIBRARIES_DEBUG "${OpenCL_UtilsCpp_DEBUG_LIBRARY}")
-    endif()
-    list(APPEND _OpenCL_REQUIRED_VARS OpenCL_UtilsCpp_LIBRARY)
-    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_UtilsCpp_LIBRARY)
-    list(APPEND OpenCL_LIBRARIES "${OpenCL_UtilsCpp_LIBRARY}")
-    
-  endif()
 # If the user did not specify components explicitly, in the spirit of backwards compat,
 # find Headers and ICD-Loader minimally to succeed, but add HeadersCpp, Utils and
 # UtilsCpp to the result variables if present.
 else()
   list(APPEND _OpenCL_REQUIRED_VARS OpenCL_INCLUDE_DIR OpenCL_LIBRARY)
+  list(APPEND _OpenCL_ADVANCED_VARS OpenCL_INCLUDE_DIR OpenCL_LIBRARY)
   set(OpenCL_LIBRARIES "${OpenCL_LIBRARY}")
   set(OpenCL_INCLUDE_DIRS "${OpenCL_INCLUDE_DIR}")
-  list(APPEND _OpenCL_ADVANCED_VARS OpenCL_LIBRARY OpenCL_INCLUDE_DIR)
   if(OpenCL_HeadersCpp_INCLUDE_DIR)
     list(APPEND OpenCL_INCLUDE_DIRS "${OpenCL_HeadersCpp_INCLUDE_DIR}")
     list(APPEND _OpenCL_ADVANCED_VARS OpenCL_HeadersCpp_INCLUDE_DIR)
-  endif()
-  if(OpenCL_Utils_INCLUDE_DIR)
-    list(APPEND OpenCL_INCLUDE_DIRS "${OpenCL_Utils_INCLUDE_DIR}")
-    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_Utils_INCLUDE_DIR)
-  endif()
-  if(OpenCL_Utils_LIBRARY)
-    list(APPEND OpenCL_LIBRARIES "${OpenCL_Utils_LIBRARY}")
-    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_Utils_LIBRARY)
-  endif()
-  if(OpenCL_Utils_DEBUG_LIBRARY)
-    list(APPEND OpenCL_LIBRARIES_DEBUG "${OpenCL_Utils_DEBUG_LIBRARY}")
-    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_Utils_DEBUG_LIBRARY)
-  endif()
-  if(OpenCL_UtilsCpp_INCLUDE_DIR)
-    list(APPEND OpenCL_INCLUDE_DIRS "${OpenCL_UtilsCpp_INCLUDE_DIR}")
-    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_UtilsCpp_INCLUDE_DIR)
-  endif()
-  if(OpenCL_UtilsCpp_LIBRARY)
-    list(APPEND OpenCL_LIBRARIES "${OpenCL_UtilsCpp_LIBRARY}")
-    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_UtilsCpp_LIBRARY)
-  endif()
-  if(OpenCL_UtilsCpp_DEBUG_LIBRARY)
-    list(APPEND OpenCL_LIBRARIES_DEBUG "${OpenCL_UtilsCpp_DEBUG_LIBRARY}")
-    list(APPEND _OpenCL_ADVANCED_VARS OpenCL_UtilsCpp_DEBUG_LIBRARY)
   endif()
 endif()
 
@@ -368,11 +315,13 @@ if(OpenCL_FOUND AND NOT TARGET OpenCL::Headers)
     INTERFACE_INCLUDE_DIRECTORIES "${OpenCL_INCLUDE_DIR}")
 endif()
 
-if(OpenCL_FOUND AND NOT TARGET OpenCL::HeadersCpp)
+if(OpenCL_FOUND AND
+  OpenCL_HeadersCpp_INCLUDE_DIR AND
+  NOT TARGET OpenCL::HeadersCpp)
   add_library(OpenCL::HeadersCpp INTERFACE IMPORTED)
   set_target_properties(OpenCL::HeadersCpp PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES
-      "${OpenCL_INCLUDE_DIR};${OpenCL_HeadersCpp_INCLUDE_DIR}")
+    INTERFACE_INCLUDE_DIRECTORIES "${OpenCL_HeadersCpp_INCLUDE_DIR}"
+    INTERFACE_LINK_LIBRARIES OpenCL::Headers)
 endif()
 
 if(OpenCL_FOUND AND NOT TARGET OpenCL::OpenCL)
@@ -387,10 +336,13 @@ if(OpenCL_FOUND AND NOT TARGET OpenCL::OpenCL)
   endif()
 
   set_target_properties(OpenCL::OpenCL PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${OpenCL_INCLUDE_DIR}")
+    INTERFACE_LINK_LIBRARIES OpenCL::Headers)
 endif()
 
-if(OpenCL_FOUND AND NOT TARGET OpenCL::Utils)
+if(OpenCL_FOUND AND
+  OpenCL_Utils_INCLUDE_DIR AND
+  (OpenCL_Utils_LIBRARY OR OpenCL_Utils_DEBUG_LIBRARY) AND
+  NOT TARGET OpenCL::Utils)
   add_library(OpenCL::Utils UNKNOWN IMPORTED)
   set_target_properties(OpenCL::Utils PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES
@@ -409,7 +361,10 @@ if(OpenCL_FOUND AND NOT TARGET OpenCL::Utils)
   endif()
 endif()
 
-if(OpenCL_FOUND AND NOT TARGET OpenCL::UtilsCpp)
+if(OpenCL_FOUND AND
+  OpenCL_UtilsCpp_INCLUDE_DIR AND
+  (OpenCL_UtilsCpp_LIBRARY OR OpenCL_UtilsCpp_DEBUG_LIBRARY) AND
+  NOT TARGET OpenCL::UtilsCpp)
   add_library(OpenCL::UtilsCpp UNKNOWN IMPORTED)
   set_target_properties(OpenCL::UtilsCpp PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES
